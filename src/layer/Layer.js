@@ -84,7 +84,9 @@ export const Layer = Evented.extend({
 	},
 
 	removeInteractiveTarget(targetEl) {
-		delete this._map._targets[Util.stamp(targetEl)];
+		if(this._map){
+			delete this._map._targets[Util.stamp(targetEl)];
+		}
 		return this;
 	},
 
