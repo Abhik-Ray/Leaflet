@@ -78,8 +78,10 @@ export const Layer = Evented.extend({
 		return this._map.getPane(name ? (this.options[name] || name) : this.options.pane);
 	},
 
-	addInteractiveTarget(targetEl) {
-		this._map._targets[Util.stamp(targetEl)] = this;
+	addInteractiveTarget: function (targetEl) {
+		if(this._map._targets){
+			this._map._targets[Util.stamp(targetEl)] = this;
+		}
 		return this;
 	},
 
