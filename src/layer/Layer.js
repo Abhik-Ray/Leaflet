@@ -79,7 +79,9 @@ export var Layer = Evented.extend({
 	},
 
 	addInteractiveTarget: function (targetEl) {
-		this._map._targets[Util.stamp(targetEl)] = this;
+		if(this._map._targets){
+			this._map._targets[Util.stamp(targetEl)] = this;
+		}
 		return this;
 	},
 
