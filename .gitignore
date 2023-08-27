@@ -13,6 +13,6 @@ coverage/
 .mailmap
 component.json
 debug/local/
-Gemfile.lock
 yarn.lock
 *.log
+.eslintcache

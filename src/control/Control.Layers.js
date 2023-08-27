@@ -1,8 +1,8 @@
 
-import {Control} from './Control';
-import * as Util from '../core/Util';
-import * as DomEvent from '../dom/DomEvent';
-import * as DomUtil from '../dom/DomUtil';
+import {Control} from './Control.js';
+import * as Util from '../core/Util.js';
+import * as DomEvent from '../dom/DomEvent.js';
+import * as DomUtil from '../dom/DomUtil.js';
 
 /*
  * @class Control.Layers
@@ -43,7 +43,7 @@ import * as DomUtil from '../dom/DomUtil';
  * ```
  */
 
-export var Layers = Control.extend({
+export const Layers = Control.extend({
 	// @section
 	// @aka Control.Layers options
 	options: {
@@ -71,76 +71,88 @@ export var Layers = Control.extend({
 		// The function receives both the `L.Layer` instances and their names, as in
 		// `sortFunction(layerA, layerB, nameA, nameB)`.
 		// By default, it sorts layers alphabetically by their name.
-		sortFunction: function (layerA, layerB, nameA, nameB) {
+		sortFunction(layerA, layerB, nameA, nameB) {
 			return nameA < nameB ? -1 : (nameB < nameA ? 1 : 0);
 		}
 	},
 
-	initialize: function (baseLayers, overlays, options) {
+	initialize(baseLayers, overlays, options) {
 		Util.setOptions(this, options);
 
 		this._layerControlInputs = [];
 		this._layers = [];
 		this._lastZIndex = 0;
 		this._handlingClick = false;
+		this._preventClick = false;
 
-		for (var i in baseLayers) {
-			this._addLayer(baseLayers[i], i);
+		for (const i in baseLayers) {
+			if (Object.hasOwn(baseLayers, i)) {
+				this._addLayer(baseLayers[i], i);
+			}
 		}
 
-		for (i in overlays) {
-			this._addLayer(overlays[i], i, true);
+		for (const i in overlays) {
+			if (Object.hasOwn(overlays, i)) {
+				this._addLayer(overlays[i], i, true);
+			}
 		}
 	},
 
-	onAdd: function (map) {
+	onAdd(map) {
 		this._initLayout();
 		this._update();
 
 		this._map = map;
 		map.on('zoomend', this._checkDisabledLayers, this);
 
-		for (var i = 0; i < this._layers.length; i++) {
+		for (let i = 0; i < this._layers.length; i++) {
 			this._layers[i].layer.on('add remove', this._onLayerChange, this);
+		}
+
+		if (!this.options.collapsed) {
+			// update the height of the container after resizing the window
+			map.on('resize', this._expandIfNotCollapsed, this);
 		}
 
 		return this._container;
 	},
 
-	addTo: function (map) {
+	addTo(map) {
 		Control.prototype.addTo.call(this, map);
 		// Trigger expand after Layers Control has been inserted into DOM so that is now has an actual height.
 		return this._expandIfNotCollapsed();
 	},
 
-	onRemove: function () {
+	onRemove() {
 		this._map.off('zoomend', this._checkDisabledLayers, this);
 
-		for (var i = 0; i < this._layers.length; i++) {
+		for (let i = 0; i < this._layers.length; i++) {
 			this._layers[i].layer.off('add remove', this._onLayerChange, this);
 		}
+
+		this._map.off('resize', this._expandIfNotCollapsed, this);
 	},
 
 	// @method addBaseLayer(layer: Layer, name: String): this
 	// Adds a base layer (radio button entry) with the given name to the control.
-	addBaseLayer: function (layer, name) {
+	addBaseLayer(layer, name) {
 		this._addLayer(layer, name);
 		return (this._map) ? this._update() : this;
 	},
 
 	// @method addOverlay(layer: Layer, name: String): this
 	// Adds an overlay (checkbox entry) with the given name to the control.
-	addOverlay: function (layer, name) {
+	addOverlay(layer, name) {
 		this._addLayer(layer, name, true);
 		return (this._map) ? this._update() : this;
 	},
 
 	// @method removeLayer(layer: Layer): this
 	// Remove the given layer from the control.
-	removeLayer: function (layer) {
+	removeLayer(layer) {
 		layer.off('add remove', this._onLayerChange, this);
 
-		var obj = this._getLayer(Util.stamp(layer));
+		const obj = this._getLayer(Util.stamp(layer));
 		if (obj) {
 			this._layers.splice(this._layers.indexOf(obj), 1);
 		}
@@ -149,15 +161,15 @@ export var Layers = Control.extend({
 
 	// @method expand(): this
 	// Expand the control container if collapsed.
-	expand: function () {
-		DomUtil.addClass(this._container, 'leaflet-control-layers-expanded');
+	expand() {
+		this._container.classList.add('leaflet-control-layers-expanded');
 		this._section.style.height = null;
-		var acceptableHeight = this._map.getSize().y - (this._container.offsetTop + 50);
+		const acceptableHeight = this._map.getSize().y - (this._container.offsetTop + 50);
 		if (acceptableHeight < this._section.clientHeight) {
-			DomUtil.addClass(this._section, 'leaflet-control-layers-scrollbar');
-			this._section.style.height = acceptableHeight + 'px';
+			this._section.classList.add('leaflet-control-layers-scrollbar');
+			this._section.style.height = `${acceptableHeight}px`;
 		} else {
-			DomUtil.removeClass(this._section, 'leaflet-control-layers-scrollbar');
+			this._section.classList.remove('leaflet-control-layers-scrollbar');
 		}
 		this._checkDisabledLayers();
 		return this;
@@ -165,13 +177,18 @@ export var Layers = Control.extend({
 
 	// @method collapse(): this
 	// Collapse the control container if expanded.
-	collapse: function () {
-		DomUtil.removeClass(this._container, 'leaflet-control-layers-expanded');
+	collapse(ev) {
+		// On touch devices `pointerleave` is fired while clicking on a checkbox.
+		// The control was collapsed instead of adding the layer to the map.
+		// So we allow collapse if it is not touch and pointerleave.
+		if (!ev || !(ev.type === 'pointerleave' && ev.pointerType === 'touch')) {
+			this._container.classList.remove('leaflet-control-layers-expanded');
+		}
 		return this;
 	},
 
-	_initLayout: function () {
-		var className = 'leaflet-control-layers',
+	_initLayout() {
+		const className = 'leaflet-control-layers',
 		    container = this._container = DomUtil.create('div', className),
 		    collapsed = this.options.collapsed;
 
@@ -181,44 +198,48 @@ export var Layers = Control.extend({
 		DomEvent.disableClickPropagation(container);
 		DomEvent.disableScrollPropagation(container);
 
-		var section = this._section = DomUtil.create('section', className + '-list');
+		const section = this._section = DomUtil.create('fieldset', `${className}-list`);
 
 		if (collapsed) {
 			this._map.on('click', this.collapse, this);
 
 			DomEvent.on(container, {
-				mouseenter: function () {
-					DomEvent.on(section, 'click', DomEvent.preventDefault);
-					this.expand();
-					setTimeout(function () {
-						DomEvent.off(section, 'click', DomEvent.preventDefault);
-					});
-				},
-				mouseleave: this.collapse
+				pointerenter: this._expandSafely,
+				pointerleave: this.collapse
 			}, this);
 		}
 
-		var link = this._layersLink = DomUtil.create('a', className + '-toggle', container);
+		const link = this._layersLink = DomUtil.create('a', `${className}-toggle`, container);
 		link.href = '#';
 		link.title = 'Layers';
 		link.setAttribute('role', 'button');
 
-		DomEvent.on(link, 'click', DomEvent.preventDefault); // prevent link function
-		DomEvent.on(link, 'focus', this.expand, this);
+		DomEvent.on(link, {
+			keydown(e) {
+				if (e.code === 'Enter') {
+					this._expandSafely();
+				}
+			},
+			// Certain screen readers intercept the key event and instead send a click event
+			click(e) {
+				DomEvent.preventDefault(e);
+				this._expandSafely();
+			}
+		}, this);
 
 		if (!collapsed) {
 			this.expand();
 		}
 
-		this._baseLayersList = DomUtil.create('div', className + '-base', section);
-		this._separator = DomUtil.create('div', className + '-separator', section);
-		this._overlaysList = DomUtil.create('div', className + '-overlays', section);
+		this._baseLayersList = DomUtil.create('div', `${className}-base`, section);
+		this._separator = DomUtil.create('div', `${className}-separator`, section);
+		this._overlaysList = DomUtil.create('div', `${className}-overlays`, section);
 
 		container.appendChild(section);
 	},
 
-	_getLayer: function (id) {
-		for (var i = 0; i < this._layers.length; i++) {
+	_getLayer(id) {
+		for (let i = 0; i < this._layers.length; i++) {
 
 			if (this._layers[i] && Util.stamp(this._layers[i].layer) === id) {
 				return this._layers[i];
@@ -226,21 +247,19 @@ export var Layers = Control.extend({
 		}
 	},
 
-	_addLayer: function (layer, name, overlay) {
+	_addLayer(layer, name, overlay) {
 		if (this._map) {
 			layer.on('add remove', this._onLayerChange, this);
 		}
 
 		this._layers.push({
-			layer: layer,
-			name: name,
-			overlay: overlay
+			layer,
+			name,
+			overlay
 		});
 
 		if (this.options.sortLayers) {
-			this._layers.sort(Util.bind(function (a, b) {
-				return this.options.sortFunction(a.layer, b.layer, a.name, b.name);
-			}, this));
+			this._layers.sort(((a, b) => this.options.sortFunction(a.layer, b.layer, a.name, b.name)));
 		}
 
 		if (this.options.autoZIndex && layer.setZIndex) {
@@ -251,14 +270,14 @@ export var Layers = Control.extend({
 		this._expandIfNotCollapsed();
 	},
 
-	_update: function () {
+	_update() {
 		if (!this._container) { return this; }
 
-		DomUtil.empty(this._baseLayersList);
-		DomUtil.empty(this._overlaysList);
+		this._baseLayersList.replaceChildren();
+		this._overlaysList.replaceChildren();
 
 		this._layerControlInputs = [];
-		var baseLayersPresent, overlaysPresent, i, obj, baseLayersCount = 0;
+		let baseLayersPresent, overlaysPresent, i, obj, baseLayersCount = 0;
 
 		for (i = 0; i < this._layers.length; i++) {
 			obj = this._layers[i];
@@ -279,12 +298,12 @@ export var Layers = Control.extend({
 		return this;
 	},
 
-	_onLayerChange: function (e) {
+	_onLayerChange(e) {
 		if (!this._handlingClick) {
 			this._update();
 		}
 
-		var obj = this._getLayer(Util.stamp(e.target));
+		const obj = this._getLayer(Util.stamp(e.target));
 
 		// @namespace Map
 		// @section Layer events
@@ -295,7 +314,7 @@ export var Layers = Control.extend({
 		// @event overlayremove: LayersControlEvent
 		// Fired when an overlay is deselected through the [layers control](#control-layers).
 		// @namespace Control.Layers
-		var type = obj.overlay ?
+		const type = obj.overlay ?
 			(e.type === 'add' ? 'overlayadd' : 'overlayremove') :
 			(e.type === 'add' ? 'baselayerchange' : null);
 
@@ -305,21 +324,20 @@ export var Layers = Control.extend({
 	},
 
 	// IE7 bugs out if you create a radio dynamically, so you have to do it this hacky way (see https://stackoverflow.com/a/119079)
-	_createRadioElement: function (name, checked) {
+	_createRadioElement(name, checked) {
 
-		var radioHtml = '<input type="radio" class="leaflet-control-layers-selector" name="' +
-				name + '"' + (checked ? ' checked="checked"' : '') + '/>';
+		const radioHtml = `<input type="radio" class="leaflet-control-layers-selector" name="${name}"${checked ? ' checked="checked"' : ''}/>`;
 
-		var radioFragment = document.createElement('div');
+		const radioFragment = document.createElement('div');
 		radioFragment.innerHTML = radioHtml;
 
 		return radioFragment.firstChild;
 	},
 
-	_addItem: function (obj) {
-		var label = document.createElement('label'),
-		    checked = this._map.hasLayer(obj.layer),
-		    input;
+	_addItem(obj) {
+		const label = document.createElement('label'),
+		      checked = this._map.hasLayer(obj.layer);
+		let input;
 
 		if (obj.overlay) {
 			input = document.createElement('input');
@@ -327,7 +345,7 @@ export var Layers = Control.extend({
 			input.className = 'leaflet-control-layers-selector';
 			input.defaultChecked = checked;
 		} else {
-			input = this._createRadioElement('leaflet-base-layers_' + Util.stamp(this), checked);
+			input = this._createRadioElement(`leaflet-base-layers_${Util.stamp(this)}`, checked);
 		}
 
 		this._layerControlInputs.push(input);
@@ -335,33 +353,38 @@ export var Layers = Control.extend({
 
 		DomEvent.on(input, 'click', this._onInputClick, this);
 
-		var name = document.createElement('span');
-		name.innerHTML = ' ' + obj.name;
+		const name = document.createElement('span');
+		name.innerHTML = ` ${obj.name}`;
 
 		// Helps from preventing layer control flicker when checkboxes are disabled
 		// https://github.com/Leaflet/Leaflet/issues/2771
-		var holder = document.createElement('span');
+		const holder = document.createElement('span');
 
 		label.appendChild(holder);
 		holder.appendChild(input);
 		holder.appendChild(name);
 
-		var container = obj.overlay ? this._overlaysList : this._baseLayersList;
+		const container = obj.overlay ? this._overlaysList : this._baseLayersList;
 		container.appendChild(label);
 
 		this._checkDisabledLayers();
 		return label;
 	},
 
-	_onInputClick: function () {
-		var inputs = this._layerControlInputs,
-		    input, layer;
-		var addedLayers = [],
-		    removedLayers = [];
+	_onInputClick() {
+		// expanding the control on mobile with a click can cause adding a layer - we don't want this
+		if (this._preventClick) {
+			return;
+		}
+
+		const inputs = this._layerControlInputs,
+		      addedLayers = [],
+		      removedLayers = [];
+		let input, layer;
 
 		this._handlingClick = true;
 
-		for (var i = inputs.length - 1; i >= 0; i--) {
+		for (let i = inputs.length - 1; i >= 0; i--) {
 			input = inputs[i];
 			layer = this._getLayer(input.layerId).layer;
 
@@ -373,12 +396,12 @@ export var Layers = Control.extend({
 		}
 
 		// Bugfix issue 2318: Should remove all old layers before readding new ones
-		for (i = 0; i < removedLayers.length; i++) {
+		for (let i = 0; i < removedLayers.length; i++) {
 			if (this._map.hasLayer(removedLayers[i])) {
 				this._map.removeLayer(removedLayers[i]);
 			}
 		}
-		for (i = 0; i < addedLayers.length; i++) {
+		for (let i = 0; i < addedLayers.length; i++) {
 			if (!this._map.hasLayer(addedLayers[i])) {
 				this._map.addLayer(addedLayers[i]);
 			}
@@ -389,13 +412,12 @@ export var Layers = Control.extend({
 		this._refocusOnMap();
 	},
 
-	_checkDisabledLayers: function () {
-		var inputs = this._layerControlInputs,
-		    input,
-		    layer,
-		    zoom = this._map.getZoom();
+	_checkDisabledLayers() {
+		const inputs = this._layerControlInputs,
+		      zoom = this._map.getZoom();
+		let input, layer;
 
-		for (var i = inputs.length - 1; i >= 0; i--) {
+		for (let i = inputs.length - 1; i >= 0; i--) {
 			input = inputs[i];
 			layer = this._getLayer(input.layerId).layer;
 			input.disabled = (layer.options.minZoom !== undefined && zoom < layer.options.minZoom) ||
@@ -404,11 +426,22 @@ export var Layers = Control.extend({
 		}
 	},
 
-	_expandIfNotCollapsed: function () {
+	_expandIfNotCollapsed() {
 		if (this._map && !this.options.collapsed) {
 			this.expand();
 		}
 		return this;
+	},
+
+	_expandSafely() {
+		const section = this._section;
+		this._preventClick = true;
+		DomEvent.on(section, 'click', DomEvent.preventDefault);
+		this.expand();
+		setTimeout(() => {
+			DomEvent.off(section, 'click', DomEvent.preventDefault);
+			this._preventClick = false;
+		});
 	}
 
 });
@@ -416,6 +449,6 @@ export var Layers = Control.extend({
 
 // @factory L.control.layers(baselayers?: Object, overlays?: Object, options?: Control.Layers options)
 // Creates a layers control with the given layers. Base layers will be switched with radio buttons, while overlays will be switched with checkboxes. Note that all base layers should be passed in the base layers object, but only one should be added to the map during map instantiation.
-export var layers = function (baseLayers, overlays, options) {
+export const layers = function (baseLayers, overlays, options) {
 	return new Layers(baseLayers, overlays, options);
 };
